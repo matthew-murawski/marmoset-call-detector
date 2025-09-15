@@ -23,13 +23,15 @@ function test_path_input_with_explicit_channel(testCase)
     X = [t1, t2];
 
     tmp = [tempname, '.wav'];
-    audiowrite(tmp, X, fs);
+    % write 32-bit float to minimize quantization error from i/o
+    audiowrite(tmp, X, fs, 'BitsPerSample', 32);
 
     [x, fs_out] = read_audio(tmp, 1);
 
     verifyEqual(testCase, fs_out, double(fs));
     verifySize(testCase, x, [size(X,1), 1]);
-    verifyLessThan(testCase, max(abs(x - double(t1))), 1e-12);
+    % allow small tolerance due to 32-bit float quantization on disk i/o
+    verifyLessThan(testCase, max(abs(x - double(t1))), 1e-6);
 end
 
 function test_struct_input_defaults_to_ch2_when_stereo(testCase)
