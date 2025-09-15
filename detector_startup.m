@@ -1,4 +1,4 @@
-% startup.m
+% detector-startup.m
 % set up matlab paths for the marmoset-call-detector project.
 %
 % what this does:

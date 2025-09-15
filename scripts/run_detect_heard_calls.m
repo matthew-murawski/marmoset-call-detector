@@ -61,13 +61,14 @@ function run_detect_heard_calls(wav_path, self_labels_path, out_txt)
     params.max_event_ms    = 4000;
     params.pre_pad_ms      = 30;
     params.post_pad_ms     = 100;
+    params.t_end           = 300;
     % params.ref_channel_index = [];  % optional; leave unset to use detector default
 
     % --- run detection
-    heard = detect_heard_calls_v1(wav_path, self_labels, params);
+    heard = detect_heard_calls_v1_chunked(wav_path, self_labels, params);
 
     % --- export to audacity labels
-    export_audacity_labels(out_txt, heard, 'heard');
+    export_audacity_labels(heard, out_txt);
 
     % --- print a short summary
     n_events = 0;
