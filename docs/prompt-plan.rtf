@@ -1,0 +1,487 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2709
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\froman\fcharset0 Times-Bold;\f1\fmodern\fcharset0 Courier;\f2\froman\fcharset0 Times-Roman;
+\f3\fmodern\fcharset0 Courier-Bold;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+\margl1440\margr1440\vieww17480\viewh13220\viewkind0
+\deftab720
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Prompt A1 \'97 Repo scaffolding\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+You are implementing the first step of a MATLAB project called "marmoset-call-detector". Create the following repository structure and files:\
+\
+- Root files: README.md, LICENSE (MIT), .gitignore (MATLAB patterns, OS cruft), startup.m\
+- Folders: src/io, src/preprocess, src/features, src/detect, src/main, scripts, tests/helpers, tests/unit, tests/e2e\
+\
+Fill contents:\
+\
+1) README.md: one-paragraph overview; quickstart with MATLAB version; "run startup.m"; and a minimal usage example calling `detect_heard_calls_v1` (stub for now).\
+\
+2) startup.m: \
+   - addpath(genpath(fullfile(pwd,'src')));\
+   - addpath(genpath(fullfile(pwd,'scripts')));\
+   - print a short summary of paths added.\
+   - comments follow this style: lowercase, section-by-section for intent; minimal inline comments.\
+\
+3) .gitignore: ignore *.asv, .DS_Store, *.mex*, *.mat in tests artifacts, and /results/.\
+\
+4) LICENSE: MIT with placeholder copyright.\
+\
+5) Create empty placeholder .m files (with file headers only) for:\
+   - src/io/read_audio.m\
+   - src/preprocess/frame_params.m\
+   - src/preprocess/compute_stft_logmag.m\
+   - src/features/band_energy.m\
+   - src/features/spectral_flux_pos.m\
+   - src/detect/rolling_stats.m\
+   - src/detect/build_self_mask.m\
+   - src/detect/apply_hysteresis.m\
+   - src/detect/detect_frames.m\
+   - src/detect/frames_to_events.m\
+   - src/main/detect_heard_calls_v1.m\
+   - src/io/export_audacity_labels.m\
+   - scripts/run_detect_heard_calls.m\
+\
+6) Add a minimal MATLAB unit test bootstrap at tests/unit/test_sanity.m that asserts true.\
+\
+Follow MATLAB coding conventions, and ensure every .m file has a function signature (even if empty stub) and the comment style specified.\
+\
+Return the full contents of all new/modified files.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt A3 \'97 GitHub Actions CI (optional but recommended)\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Add GitHub Actions CI to run MATLAB unit tests on push and PR.\
+\
+1) Create .github/workflows/matlab.yml using mathworks/setup-matlab@v2.\
+2) Steps:\
+   - checkout\
+   - setup-matlab\
+   - run "matlab -batch 'startup; results = runtests; assertSuccess(results)'" \
+3) Ensure it caches nothing special; keep it simple.\
+\
+Return the YAML and mention any required repo settings.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt B1 \'97 
+\f3\fs39 read_audio
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/io/read_audio.m and tests.\
+\
+Requirements:\
+- Signature: [x, fs] = read_audio(input, ref_channel_index)\
+- input can be:\
+  a) string/char path to .wav\
+  b) struct with fields .x (NxC double) and .fs (scalar)\
+- If no ref_channel_index provided:\
+  - if C >= 2, default to channel 2\
+  - else use channel 1\
+- Validate: fs > 0; x is nonempty; select the channel safely.\
+- Return x as column vector (double), fs as double.\
+- Throw error with identifier 'read_audio:invalidInput' on bad input.\
+\
+Tests:\
+- tests/unit/test_read_audio.m\
+  - use helpers to synthesize a short 2-ch signal and write a temporary wav (audiowrite).\
+  - test path input with explicit channel.\
+  - test struct input with default channel behavior (C>=2 \uc0\u8594  ch2).\
+  - test mono input defaults to ch1.\
+  - test error on empty data.\
+\
+Also add tests/helpers/make_sine.m to generate simple tones for tests.\
+\
+Ensure comments follow the lowercase style. Return the function and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt B2 \'97 
+\f3\fs39 frame_params
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/preprocess/frame_params.m and tests.\
+\
+Function:\
+- Signature: FP = frame_params(fs, win_ms, hop_ms, n_samples)\
+- Purpose: convert ms to samples and compute derived frame counts.\
+- Output struct FP with fields:\
+  - win_samp, hop_samp (integers, >=1)\
+  - n_frames (floor( (n_samples - win_samp)/hop_samp ) + 1, min 0)\
+  - t_frames (1\'d7n_frames vector of frame center times, seconds)\
+- Assume frames start at sample 1. Frame center time = (start_idx + win_samp/2 - 1)/fs.\
+- Validate inputs; error id 'frame_params:invalidArgs' when fs<=0 or ms<=0.\
+\
+Tests:\
+- tests/unit/test_frame_params.m\
+  - known small n_samples case; check counts and first/last center times.\
+  - edge case: n_samples < win_samp \uc0\u8594  n_frames=0.\
+\
+Return code and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt C1 \'97 
+\f3\fs39 compute_stft_logmag
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/preprocess/compute_stft_logmag.m.\
+\
+Function:\
+- Signature: [Slog, f, t] = compute_stft_logmag(x, fs, FP, bandpass)\
+- Use FFT-based spectrogram with Hann window of length FP.win_samp and hop FP.hop_samp.\
+- Return Slog = log( eps + |S| ), restricted to rows with f in [bandpass(1), bandpass(2)].\
+- f: vector of frequencies for kept rows; t: vector of times aligned to FP.t_frames (allow small numerical differences).\
+- Validate bandpass within (0, fs/2], lower<upper; else error 'stft:badBand'.\
+- Ensure Slog size = [n_freq_kept, FP.n_frames].\
+\
+Tests:\
+- tests/unit/test_compute_stft_logmag.m\
+  - generate a two-tone (6 kHz + 9 kHz) at fs=48k, win=25ms, hop=10ms.\
+  - assert that energy concentrates near those bins within the bandpass.\
+  - assert shape matches FP.n_frames and band-limited rows > 0.\
+\
+Return function and tests. Add tests/helpers/db.m (20*log10) if needed.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt C2 \'97 
+\f3\fs39 band_energy
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/features/band_energy.m.\
+\
+Function:\
+- Signature: E = band_energy(Slog)\
+- Compute per-frame band energy as sum over frequency rows: E = sum(exp(Slog), 1)\
+- Return row vector (1\'d7n_frames).\
+\
+Tests:\
+- tests/unit/test_band_energy.m\
+  - Create a small Slog with known values; verify the sum.\
+  - With C1's spectrogram on a tone, ensure E has higher median during tone frames vs silence.\
+\
+Return code and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt C3 \'97 
+\f3\fs39 spectral_flux_pos
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/features/spectral_flux_pos.m.\
+\
+Function:\
+- Signature: F = spectral_flux_pos(Slog)\
+- Positive spectral flux per frame:\
+  - Convert to linear magnitude M = exp(Slog)\
+  - Temporal diff along frames: D = [zeros(nf,1), diff(M,1,2)]\
+  - Zero negative values: D(D<0)=0\
+  - Sum across freq per frame: F = sum(D,1)\
+- Return row vector 1\'d7n_frames.\
+\
+Tests:\
+- tests/unit/test_spectral_flux_pos.m\
+  - On a step increase in magnitude, flux spikes once.\
+  - On constant tone, low flux except at onset/offset.\
+\
+Return code and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt D1 \'97 
+\f3\fs39 rolling_stats
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/detect/rolling_stats.m.\
+\
+Function:\
+- Signature: [med, mad] = rolling_stats(X, frames_per_window)\
+- X: 1\'d7n_frames double. Compute rolling median and MAD over a centered window:\
+  - For frame i, use indices [i-w, i+w], where w=floor(frames_per_window/2), clipped to valid range.\
+  - MAD = median(|X - median_window|)*1.4826 (Gaussian consistency).\
+- Handle n_frames=0 gracefully (return empty).\
+- Avoid loops if straightforward; clarity > micro-optimizations.\
+\
+Tests:\
+- tests/unit/test_rolling_stats.m\
+  - Known small vector with a spike; confirm robust stats unaffected compared to mean/std.\
+  - Edge frames use clipped windows; check first and last values.\
+\
+Return code and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt D2 \'97 
+\f3\fs39 detect_frames
+\f0\fs36  (thresholding) + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/detect/detect_frames.m.\
+\
+Function:\
+- Signature: active = detect_frames(E, F, medE, madE, medF, madF, kE, kF, mask)\
+- E, F: 1\'d7n_frames energy and flux.\
+- medE/madE, medF/madF: rolling stats.\
+- kE, kF: scalars.\
+- mask: optional logical 1\'d7n_frames; true = allowed, false = excluded. If omitted, treat as all true.\
+- Compute candidate = (E > medE + kE*madE) & (F > medF + kF*madF)\
+- active = candidate & mask\
+- Return logical 1\'d7n_frames.\
+\
+Tests:\
+- tests/unit/test_detect_frames.m\
+  - Build synthetic vectors and verify gating.\
+  - Verify mask exclusion zeros out candidates.\
+\
+Return function and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt E1 \'97 
+\f3\fs39 build_self_mask
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/detect/build_self_mask.m.\
+\
+Function:\
+- Signature: mask = build_self_mask(self_labels, FP)\
+- self_labels: either Nx2 [on off] (seconds) or struct array with fields .on, .off\
+- params for padding are NOT here; keep mask builder minimal. We'll pre-pad inputs in caller tests for now.\
+- Convert each [on, off] to frame indices using FP.t_frames and set those frames to false (excluded). Otherwise frames are true.\
+- Edge cases: clip to [1, FP.n_frames]; ignore invalid intervals (off<=on).\
+- If no labels or FP.n_frames==0, return all true.\
+\
+Tests:\
+- tests/unit/test_build_self_mask.m\
+  - Create FP with known t_frames; craft labels that map to frames; verify mask holes.\
+  - Struct vs Nx2 inputs both work.\
+\
+Return code and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt E2 \'97 
+\f3\fs39 apply_hysteresis
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/detect/apply_hysteresis.m.\
+\
+Function:\
+- Signature: state = apply_hysteresis(E, F, medE, madE, medF, madF, kHighE, kHighF, kLow, release_frames)\
+- 2-state (0=background, 1=call):\
+  - enter call when (E > medE + kHighE*madE) & (F > medF + kHighF*madF)\
+  - exit call when BOTH E and F fall below (med + kLow*mad) for >= release_frames consecutive frames\
+- Return logical 1\'d7n_frames.\
+\
+Tests:\
+- tests/unit/test_apply_hysteresis.m\
+  - Construct sequences where high threshold triggers entry and low threshold controls exit.\
+  - Confirm no chatter at boundary.\
+\
+Return function and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt E2b \'97 integrate mask into hysteresis path\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Update detect_frames to optionally skip frames before hysteresis by passing mask in. Also add a small helper in tests to compose:\
+active_raw = detect_frames(...);\
+state = apply_hysteresis(...);\
+active = state & mask;\
+\
+Add tests/unit/test_mask_plus_hysteresis.m to ensure masked frames never appear as active even if hysteresis is on.\
+Return updated files and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt F1 \'97 
+\f3\fs39 frames_to_events
+\f0\fs36  + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/detect/frames_to_events.m.\
+\
+Function:\
+- Signature: events = frames_to_events(active, FP, min_event_ms, merge_gap_ms, max_event_ms)\
+- Steps:\
+  1) find contiguous runs of active==true\
+  2) drop runs with duration < min_event_ms\
+  3) merge adjacent runs separated by gaps < merge_gap_ms\
+  4) cap overly long runs at max_event_ms by splitting or truncating (simplest: truncate)\
+- Return table with variables: on, off, dur (seconds). Empty table if no events.\
+\
+Tests:\
+- tests/unit/test_frames_to_events.m\
+  - Cases: short blips removed; small gaps merged; long event truncated.\
+  - Time conversion consistent with FP.t_frames and hop.\
+\
+Return code and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt G1 \'97 
+\f3\fs39 detect_heard_calls_v1
+\f0\fs36  + synthetic E2E test\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/main/detect_heard_calls_v1.m orchestrating all prior pieces.\
+\
+Function:\
+- Signature: heard = detect_heard_calls_v1(wav_input, self_labels, params)\
+- Steps:\
+  1) parse params, set defaults (bandpass, win_ms, hop_ms, rolling_sec, kE, kF, k_low, release_frames, min_event_ms, merge_gap_ms, max_event_ms, pre_pad_ms, post_pad_ms, ref_channel_index).\
+  2) read audio; build FP\
+  3) compute Slog, f, t; features E, F\
+  4) rolling stats with frames_per_window = round(rolling_sec / hop_ms * 1000)\
+  5) pad self labels by pre/post; build mask (true=allowed, false=excluded)\
+  6) candidate frames via detect_frames; state via apply_hysteresis; active = state & mask\
+  7) events = frames_to_events(active,...)\
+  8) heard = table(on, off, dur); add heard.confidence = normalize(E(active)) median per event (simple heuristic); heard.meta.params = params (store via struct in table.Properties.UserData if needed)\
+- Return table.\
+\
+Tests:\
+- tests/e2e/test_detect_heard_calls_v1.m\
+  - Synthesize 30 s audio at fs=48k with:\
+    - background pink noise\
+    - three "heard" events as 7 kHz tone bursts (dur ~200, 500, 1000 ms)\
+    - two "self" events elsewhere; pad them and ensure detector returns zero events in those regions\
+  - Assert the returned events count matches planted heard events and on/off within \'b120 ms.\
+  - Assert no events in self-masked windows.\
+\
+Add tests/helpers/make_synthetic_track.m to generate the signals (returns x, fs, self_labels, heard_truth).\
+\
+Return code and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt H1 \'97 Export + tests\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Implement src/io/export_audacity_labels.m.\
+\
+Function:\
+- Signature: export_audacity_labels(filename_txt, events_table, label_text)\
+- Write rows: on \\t off \\t label_text\
+- Ensure ascending order; handle empty table (write empty file).\
+- Validate inputs; error 'export:badInput' for missing fields.\
+\
+Tests:\
+- tests/unit/test_export_audacity_labels.m\
+  - Write a small table to a temp file; read back lines; compare.\
+  - Empty table produces empty file.\
+\
+Return function and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt H2 \'97 Runner script\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Create scripts/run_detect_heard_calls.m.\
+\
+Behavior:\
+- Example hard-coded wav_path (commented), or accept inputs via arguments:\
+  - wav_path, self_labels_path (MAT file containing Nx2 double 'self_labels')\
+  - out_txt path\
+- Build params struct with sensible defaults (from the spec)\
+- Call detect_heard_calls_v1, then export_audacity_labels(out_txt, heard, 'heard')\
+- Print a short summary: number of events, total duration.\
+\
+Also add tests/e2e/test_runner_smoke.m that calls the script with a synthetic wav and labels (write the wav and MAT in tempdir) using evalc to suppress output, and checks the label file exists and has expected number of lines.\
+\
+Return script and tests.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 Prompt I1 \'97 Perf harness + docs polish\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Add scripts/benchmark_one_clip.m to measure runtime:\
+- Load a 60 s synthetic clip; run detect_heard_calls_v1; print elapsed and x_rt = duration / elapsed.\
+- Assert x_rt >= 1 on developer machine is not testable in CI; but include code.\
+\
+Update README.md:\
+- Add "Parameters" table with defaults and meanings.\
+- Add "Evaluating Quality" section explaining event-level tolerance and suggested thresholds (\'b125\'9650 ms).\
+- Add "Audacity export" step.\
+\
+Return new script and README updates.\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs24 \cf0 \
+\pard\pardeftab720\sa298\partightenfactor0
+
+\f0\b\fs36 \cf0 (Optional) Prompt J1 \'97 Overlap rescue scaffold\
+\pard\pardeftab720\partightenfactor0
+
+\f1\b0\fs26 \cf0 \
+Create a placeholder function src/detect/overlap_rescue.m (not used by v1 yet) with signature:\
+- events_overlap = overlap_rescue(Slog_ref, Slog_parab, FP, self_mask, params)\
+Only include function header and section comments describing the intended algorithm (ratio inside masked windows). Add a TODO note linking future v1.1 milestone. Do NOT integrate into main yet.\
+\
+Return file.\
+}
