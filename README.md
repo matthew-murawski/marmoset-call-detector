@@ -1,14 +1,23 @@
-# marmoset-call-detector
+# marmoset-call-detector (v1)
 
-a small matlab toolbox to detect **heard** marmoset calls from multi-channel wav recordings using a reference-mic-only approach. v1 combines a band-limited log-stft (25 ms / 10 ms), energy + positive spectral flux, robust rolling thresholds, a two-state hysteresis gate, duration/gap constraints with micro-gap merging, and a self-mask to exclude the subject’s own calls. results can be exported as audacity label tracks.
+detect “heard” marmoset calls (produced by conspecifics) from colony recordings using a simple DSP pipeline:
 
-## quickstart
-- requires **matlab r2022b+** (signal processing toolbox recommended).
-- clone or unzip this repo, open matlab at the repo root, then run:
+1. read wav (reference mic only)
+2. log-STFT (hann, 25 ms / 10 ms) in 5–12 kHz
+3. features: band-limited energy + positive spectral flux
+4. rolling robust thresholds (median + MAD)
+5. 2-state hysteresis (enter on high E/F; exit when both fall below low gate for N frames)
+6. self-mask exclusion (pad around own calls)
+7. frames → events (min duration, micro-gap merge, cap max)
+8. export to Audacity labels
+
+## quick start
 
 ```matlab
-startup
-```
+startup;  % adds paths
+heard = detect_heard_calls_v1('/path/to/rec.wav', self_labels, struct());  % defaults
+export_audacity_labels('/path/to/heard_labels.txt', heard, 'heard');
+
 
 ## minimal usage example (stub)
 ```matlab
