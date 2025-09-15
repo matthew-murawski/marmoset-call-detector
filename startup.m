@@ -7,7 +7,9 @@
 %
 % comment style: lowercase, section-by-section for intent; minimal inline comments.
 
-function startup
+P = run_startup();
+
+function P = run_startup
 % keep cwd as the repo root so relative paths are predictable
 repo_root = pwd;
 
@@ -16,6 +18,8 @@ src_path = fullfile(repo_root, 'src');
 scripts_path = fullfile(repo_root, 'scripts');
 addpath(genpath(src_path));
 addpath(genpath(scripts_path));
+
+P = paths_local;
 
 % print a short summary
 fprintf('marmoset-call-detector setup\n');
