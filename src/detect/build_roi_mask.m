@@ -1,45 +1,46 @@
 function mask = build_roi_mask(windows, FP)
-% build a frame-level roi mask from time windows.
-% windows: Nx2 [on off] in seconds (closed-open). empty -> all true.
-% FP: struct with FP.t_frames (sec) and FP.n_frames.
+% build_roi_mask
+% make a logical frame mask (true = allowed) from roi windows on the frame grid.
+%
+% behavior:
+% - if windows is empty, returns all true (no restriction).
+% - includes frames whose centers lie in any [on, off) window.
+%
+% inputs
+%   windows : Nx2 [on off] in seconds (can be empty)
+%   FP      : frame params struct; must have FP.t_frames (frame-center times in s)
 
-% handle empty or malformed inputs up front
-if isempty(windows)
-    mask = true(1, FP.n_frames);
-    return;
-end
-if size(windows,2) ~= 2
-    error('build_roi_mask:BadWindows', 'windows must be Nx2 [on off] in seconds.');
-end
-
-% drop rows with nans or non-positive width
-bad = any(isnan(windows), 2) | (windows(:,2) <= windows(:,1));
-windows = windows(~bad, :);
-
-% if nothing valid remains, keep everything
-if isempty(windows)
-    mask = true(1, FP.n_frames);
-    return;
-end
-
-% ensure row vector outputs; compare using closed-open rule
-t = FP.t_frames(:)';              % 1 x n
-on  = windows(:,1);               % nW x 1
-off = windows(:,2);               % nW x 1
-
-% implicit expansion (r2016b+) for vectorized interval membership
-in_any = (t >= on) & (t < off);   % nW x nFrames
-mask = any(in_any, 1);            % 1 x nFrames
-
-% enforce type/shape and exact length
-mask = logical(mask);
-if ~isrow(mask), mask = reshape(mask, 1, []); end
-n = FP.n_frames;
-if numel(mask) ~= n
-    % be defensive if FP.n_frames disagrees with t_frames
-    mask = mask(1:min(end, n));
-    if numel(mask) < n
-        mask(1, n) = false; % extend with false
+    % -- get frame-center times; prefer t_frames to avoid relying on n_frames
+    if isfield(FP, 't_frames') && ~isempty(FP.t_frames)
+        tf = FP.t_frames(:).';
+    else
+        error('build_roi_mask:MissingFrameTimes', ...
+              'FP must include t_frames (frame-center times in seconds).');
     end
-end
+    n = numel(tf);
+
+    % -- no roi → allow all frames
+    if isempty(windows)
+        mask = true(1, n);
+        return
+    end
+
+    % -- normalize windows to Nx2
+    if isvector(windows)
+        if numel(windows) ~= 2
+            error('build_roi_mask:BadWindows', 'windows must be Nx2 [on off] or [].');
+        end
+        windows = reshape(windows, 1, 2);
+    end
+
+    % -- accumulate membership across windows
+    mask = false(1, n);
+    for i = 1:size(windows, 1)
+        on  = double(windows(i,1));
+        off = double(windows(i,2));
+        if ~(isfinite(on) && isfinite(off)) || off <= on
+            continue  % skip bad or empty windows
+        end
+        mask = mask | (tf >= on & tf < off);
+    end
 end
