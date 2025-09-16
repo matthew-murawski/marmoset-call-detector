@@ -1,85 +1,144 @@
-function run_detect_heard_calls(wav_path, self_labels_path, out_txt)
-% run_detect_heard_calls
-% minimal runner: load self labels, build default params, run detection, export labels.
+function out = run_detect_heard_calls(session_or_wav, out_txt, varargin)
+% run heard-call detection and export an audacity label track.
 %
-% usage:
-%   run_detect_heard_calls(wav_path, self_labels_path, out_txt)
+% usage (simple, backward-compatible):
+%   run_detect_heard_calls('path/to/refmic.wav', 'heard_labels.txt')
 %
-% examples (edit paths for your machine):
-%   % wav_path = '/path/to/colony_recording.wav';
-%   % self_labels_path = '/path/to/self_labels.mat';  % contains Nx2 double 'self_labels' in seconds
-%   % out_txt = '/path/to/heard_labels.txt';
-%   % run_detect_heard_calls(wav_path, self_labels_path, out_txt);
+% usage (pre-window mode using produced labels):
+%   run_detect_heard_calls('path/to/refmic.wav', 'heard_labels.txt', ...
+%       'ProducedLabels', 'produced_labels.txt', ...   % audacity .txt OR MAT with Nx2 double 'self_labels'
+%       'PreWindowSec', 5, ...
+%       'Conservative', true)
+%
+% what this does
+% - if 'ProducedLabels' is provided, we build roi_windows = [on_i - T, on_i)
+%   with T = PreWindowSec (default 5 s), clipped at >= 0. these windows are
+%   passed to detect_heard_calls_v1 via params.roi_windows (safe no-op if
+%   your v1 doesn't yet use them).
+% - if 'Conservative' is true, we tighten entry + thresholds to reduce false positives:
+%     params.kE = 4.0;            % higher energy k
+%     params.kF = 4.0;            % higher positive spectral flux k
+%     params.min_event_ms = 100;  % longer minimum duration (ms)
+%     params.release_frames = 4;  % longer to release (stickier off)
+%     params.enter_frames  = 2;   % require >=2 frames above high to enter
+%
+% notes
+% - this function preserves the original simple usage; you can ignore the new args.
+% - export call order is (events_table, out_txt, ...); label is set to 'heard'.
 
-    % --- basic arg checking
-    if nargin ~= 3
-        error('run_detect_heard_calls:invalidArgs', ...
-            ['expected 3 inputs: wav_path, self_labels_path (MAT with Nx2 double ''self_labels''),' ...
-             ' and out_txt.']);
-    end
-    if ~(ischar(wav_path) || isstring(wav_path))
-        error('run_detect_heard_calls:invalidArgs', 'wav_path must be a char or string.');
-    end
-    if ~(ischar(self_labels_path) || isstring(self_labels_path))
-        error('run_detect_heard_calls:invalidArgs', 'self_labels_path must be a char or string.');
-    end
-    if ~(ischar(out_txt) || isstring(out_txt))
-        error('run_detect_heard_calls:invalidArgs', 'out_txt must be a char or string.');
-    end
+% -------------------- parse args
+p = inputParser;
+p.FunctionName = mfilename;
 
-    wav_path = char(wav_path);
-    self_labels_path = char(self_labels_path);
-    out_txt = char(out_txt);
+addRequired(p, 'session_or_wav');   % string path to wav (preferred) or session-like struct if your v1 supports it
+addRequired(p, 'out_txt', @(x)ischar(x)||isstring(x));
 
-    % --- load self labels (Nx2 double seconds) from MAT file
-    if ~exist(self_labels_path, 'file')
-        error('run_detect_heard_calls:fileNotFound', 'self_labels_path not found: %s', self_labels_path);
+addParameter(p, 'ProducedLabels', '', @(x)ischar(x)||isstring(x));
+addParameter(p, 'PreWindowSec', 5.0, @(x)isnumeric(x)&&isscalar(x)&&x>=0);
+addParameter(p, 'Conservative', false, @(x)islogical(x)||ismember(x,[0 1]));
+addParameter(p, 'Params', struct(), @isstruct);  % optional passthrough
+
+parse(p, session_or_wav, out_txt, varargin{:});
+args = p.Results;
+
+% -------------------- load produced labels if provided
+roi_windows = [];
+self_labels = [];  % Nx2 [on off] for self mask usage in v1 (if used there)
+
+if ~isempty(args.ProducedLabels)
+    [self_on, self_off] = read_produced(args.ProducedLabels);
+    if ~isempty(self_on)
+        T = args.PreWindowSec;
+        roi_windows = [max(0, self_on - T), self_on];
+        self_labels = [self_on, self_off];
     end
-    S = load(self_labels_path);
-    if ~isfield(S, 'self_labels')
-        error('run_detect_heard_calls:missingVar', ...
-            'file %s does not contain variable ''self_labels''.', self_labels_path);
-    end
-    self_labels = S.self_labels;
-    if ~(isnumeric(self_labels) && ismatrix(self_labels) && size(self_labels,2) == 2)
-        error('run_detect_heard_calls:badLabels', ...
-            'self_labels must be an Nx2 numeric matrix of [on off] times in seconds.');
-    end
+end
 
-    % --- build default params (from the spec)
-    params = struct();
-    params.bandpass        = [5e3, 12e3];
-    params.win_ms          = 25;
-    params.hop_ms          = 10;
-    params.rolling_sec     = 60;
-    params.kE              = 3.5;
-    params.kF              = 3.0;
-    params.k_low           = 2.0;
-    params.release_frames  = 2;
-    params.min_event_ms    = 70;
-    params.merge_gap_ms    = 50;
-    params.max_event_ms    = 4000;
-    params.pre_pad_ms      = 30;
-    params.post_pad_ms     = 100;
-    params.t_end           = 300;
-    % params.ref_channel_index = [];  % optional; leave unset to use detector default
+% -------------------- build params (compose caller-supplied Params)
+params = args.Params;
 
-    % --- run detection
-    heard = detect_heard_calls_v1_chunked(wav_path, self_labels, params);
+% pass roi windows if present
+if ~isempty(roi_windows)
+    params.roi_windows = roi_windows;  %#ok<STRNU>  % safe if v1 ignores it (keeps backward-compat)
+end
 
-    % --- export to audacity labels
-    export_audacity_labels(heard, out_txt);
+% conservative overrides
+if args.Conservative
+    params.kE = 4.0;
+    params.kF = 4.0;
+    params.min_event_ms = 100;
+    params.release_frames = 4;
+    params.enter_frames  = 2;
+end
 
-    % --- print a short summary
-    n_events = 0;
-    total_dur = 0;
-    if istable(heard) && ~isempty(heard)
-        n_events = height(heard);
-        if any(strcmp('dur', heard.Properties.VariableNames))
-            total_dur = nansum(heard.dur);
-        elseif all(ismember({'on','off'}, heard.Properties.VariableNames))
-            total_dur = nansum(heard.off - heard.on);
+% -------------------- call the detector
+% keep the original behavior: you can pass a wav path string directly
+heard = detect_heard_calls_v1(args.session_or_wav, self_labels, params);
+
+% -------------------- export to audacity labels (correct arg order)
+export_audacity_labels(heard, args.out_txt, 'Label', 'heard');
+
+% optional return
+if nargout>0
+    out = struct('heard', heard, 'roi_windows', roi_windows, 'params', params);
+end
+
+end
+
+% ======================================================================
+% helpers
+% ======================================================================
+
+function [on, off] = read_produced(path)
+% read produced labels from either an audacity .txt or a MAT with Nx2 'self_labels'.
+% returns column vectors 'on' and 'off' in seconds. empty if nothing found.
+
+    path = char(path);
+    on = []; off = [];
+    
+    if endsWith(lower(path), '.txt')
+        % prefer using the repo's helper if available
+        try
+            P = audacity_labels_to_phrases(path);
+            if isstruct(P) && isfield(P,'on') && isfield(P,'off')
+                on = P.on(:);
+                off = P.off(:);
+                return;
+            end
+        catch %#ok<CTCH>
+            % fall back to a minimal reader
         end
+        [on, off] = local_read_audacity_min(path);
+        
+    elseif endsWith(lower(path), '.mat')
+        S = load(path);
+        if isfield(S,'self_labels') && isnumeric(S.self_labels) && size(S.self_labels,2)>=2
+            on  = S.self_labels(:,1);
+            off = S.self_labels(:,2);
+        else
+            warning('run_detect_heard_calls:NoSelfLabels', ...
+                'mat file lacked Nx2 ''self_labels''; ignoring produced labels.');
+        end
+    else
+        warning('run_detect_heard_calls:UnknownProducedFormat', ...
+            'unknown produced-labels format: %s', path);
     end
-    fprintf('heard events: %d, total duration: %.3f s\n', n_events, total_dur);
+end
+
+function [on, off] = local_read_audacity_min(txt)
+% minimal audacity .txt reader: expects start<TAB>stop<TAB>label
+    fid = fopen(txt, 'r');
+    if fid<0
+        warning('run_detect_heard_calls:OpenFailed', 'could not open %s', txt);
+        on = []; off = [];
+        return;
+    end
+    C = textscan(fid, '%f%f%[^\n\r]', 'Delimiter', '\t', 'CollectOutput', true);
+    fclose(fid);
+    if isempty(C{1})
+        on = []; off = [];
+    else
+        on  = C{1}(:,1);
+        off = C{1}(:,2);
+    end
 end
